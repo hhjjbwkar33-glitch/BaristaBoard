@@ -18,17 +18,46 @@ def split_shift(start, end):
         current_time = next_time
     return split_time
 
+def generate_break(start, end):
+    work_time = datetime.strptime(end, '%H:%M:%S') - datetime.strptime(start, '%H:%M:%S')
+    if work_time < timedelta(hours=5):
+        break_time = 0
+        return None
+    elif work_time < timedelta(hours=6):
+        break_time = 15
+        
+    elif work_time < timedelta(hours=7):
+        break_time =  30
+        
+    else:
+        break_time = 60
+        
+    start_break = datetime.strptime(start, '%H:%M:%S') + timedelta(hours=3)
+    end_break = start_break + timedelta(minutes=break_time)
+
+    return (start_break, end_break)
+
 schedule = {}
+break_schedule = {}
 for index, row in df.iterrows():
     name = row['名前']
     start = row['開始時間']
     end = row['終了時間']
+
     slots = split_shift(start, end)
     for slot in slots:
         if slot in schedule:
             schedule[slot].append(name)
         else:
             schedule[slot] = [name]
+
+    result = generate_break(start, end)
+    if result is not None:
+        if name in break_schedule:
+            break_schedule[name].append(result)
+        else:
+            break_schedule[name] = [result]
+
 
 positions = ['バリスタ', 'キャッシャー', 'フロア']
 role_limit = 4
