@@ -19,6 +19,8 @@ def split_shift(start, end):
     return split_time
 
 def generate_break(start, end):
+    start = str(start)
+    end = str(end)
     work_time = datetime.strptime(end, '%H:%M:%S') - datetime.strptime(start, '%H:%M:%S')
     if work_time < timedelta(hours=5):
         break_time = 0
@@ -36,6 +38,7 @@ def generate_break(start, end):
     end_break = start_break + timedelta(minutes=break_time)
 
     return (start_break, end_break)
+
 
 schedule = {}
 break_schedule = {}
@@ -55,8 +58,11 @@ for index, row in df.iterrows():
     if result is not None:
         if name in break_schedule:
             break_schedule[name].append(result)
+            print(break_schedule)
         else:
             break_schedule[name] = [result]
+            
+    
 
 
 positions = ['バリスタ', 'キャッシャー', 'フロア']
@@ -65,7 +71,6 @@ last_position = {}
 streak_count = {}
 new_schedule = {}
 worked_minutes = {} #各従業員の累積勤務時間
-break_remaining = {} #休憩の残り時間(分単位)
 
 position_limit = {
     '通常': {'バリスタ': 1, 'キャッシャー': 1, 'フロア': 1},
@@ -120,7 +125,6 @@ def check_shortage(slot, assigned_list, num_people, peak):
                 f" | 不足: {required_count - actual_count}"
             )
     return shortages
-# =====================
 
 for slot, names in schedule.items():
     assigned = []
@@ -131,11 +135,24 @@ for slot, names in schedule.items():
     used_count = {p: 0 for p in current_limit}
 
     for position in required:
+
         for name in names:
             if name in assigned_people:
                 continue
-            if name in break_remaining:
+            
+            slot_start, slot_end = slot.split('-')
+            slot_start = datetime.strptime(slot_start, '%H:%M')
+            slot_end = datetime.strptime(slot_end, '%H:%M')
+            is_on_break = False
+            #slotと休憩時間が重なっているならポジション割り振りから除外（continue）重なっていないなら通常通りポジション割り振り
+            for break_start, break_end in break_schedule.get(name, []):
+                if break_start < slot_end and break_end > slot_start:
+                    is_on_break = True #内側ループを抜ける
+                    break
+            if is_on_break:
                 continue
+
+
             if name not in last_position:
                 last_position[name] = position
                 streak_count[name] = 0
@@ -149,25 +166,11 @@ for slot, names in schedule.items():
                 assigned.append((name, position))
                 assigned_people.add(name)
                 break
-
+            
+            
     new_schedule[slot] = assigned
 
-#休憩ルール追加
-    for name in names:  
-        if name in break_remaining:
-            print(f"  → 休憩中処理: {name} {break_remaining[name]} - 30")
-            break_remaining[name] = break_remaining.get(name,0) - 30
-            if break_remaining[name] <= 0:
-                del break_remaining[name]
     
-
-        else:
-            worked_minutes[name] = worked_minutes.get(name, 0) + 30
-            if worked_minutes[name] >= 360:
-                break_remaining[name] = 45
-                worked_minutes[name] = 0
-    
-
 
 records = []
 shortage_log = []  # 欠員ログをまとめて保持
@@ -175,8 +178,8 @@ shortage_log = []  # 欠員ログをまとめて保持
 for slot, assigned in new_schedule.items():
     for name, position in assigned:
         records.append({'時間': slot, '名前': name, 'ポジション': position})
-
-    
+   
+        
     num_people = len(schedule.get(slot, []))
     peak = is_peak(slot)
     shortages = check_shortage(slot, assigned, num_people, peak)
@@ -194,8 +197,20 @@ if shortage_log:
 else:
     print("\n 欠員なし")
 
+break_records = []
+for name, breaks in break_schedule.items():
+    for break_start, break_end in breaks:
+        break_records.append({
+            '名前' : name,
+            '休憩開始' : break_start.strftime('%H:%M'),
+            '休憩終了' : break_end.strftime('%H:%M')
+
+        })
+print(break_records)
+
 # Excel出力（シフト + 欠員ログを別シートに）
 with pd.ExcelWriter('split_30minute_result.xlsx') as writer:
     result_df.to_excel(writer, sheet_name='シフト', index=False)
     if shortage_log:
         pd.DataFrame(shortage_log).to_excel(writer, sheet_name='欠員ログ', index=False)
+        pd.DataFrame(break_records).to_excel(writer, sheet_name='休憩予定', index=False)
