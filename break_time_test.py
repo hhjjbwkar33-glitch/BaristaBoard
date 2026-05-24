@@ -189,13 +189,6 @@ for slot, assigned in new_schedule.items():
 result_df = pd.DataFrame(records)
 print(result_df)
 
-# 欠員サマリー表示
-if shortage_log:
-    print("\n===== 欠員サマリー =====")
-    shortage_df = pd.DataFrame(shortage_log)
-    print(shortage_df.to_string(index=False))
-else:
-    print("\n 欠員なし")
 
 break_records = []
 for name, breaks in break_schedule.items():
@@ -209,8 +202,22 @@ for name, breaks in break_schedule.items():
 print(break_records)
 
 # Excel出力（シフト + 欠員ログを別シートに）
+pivot_df = result_df.pivot(index='時間', columns='名前', values='ポジション')
+pivot_df = pivot_df.fillna('ー')
+print(pivot_df)
+
 with pd.ExcelWriter('split_30minute_result.xlsx') as writer:
     result_df.to_excel(writer, sheet_name='シフト', index=False)
+    pivot_df.to_excel(writer, sheet_name='シフト表', index=True)
     if shortage_log:
         pd.DataFrame(shortage_log).to_excel(writer, sheet_name='欠員ログ', index=False)
-        pd.DataFrame(break_records).to_excel(writer, sheet_name='休憩予定', index=False)
+    pd.DataFrame(break_records).to_excel(writer, sheet_name='休憩予定', index=False)
+# 欠員サマリー表示
+if shortage_log:
+    print("\n===== 欠員サマリー =====")
+    shortage_df = pd.DataFrame(shortage_log)
+    print(shortage_df.to_string(index=False))
+else:
+    print("\n 欠員なし")
+
+
